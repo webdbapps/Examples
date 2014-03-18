@@ -1,0 +1,75 @@
+Imports microsoft.sharepoint
+
+Partial Class NextExclusionNo
+    Inherits System.Web.UI.Page
+
+
+    Private listName As String = "Exclusions List"
+
+    Protected Sub Page_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles Me.Load
+
+        Dim curYear As String = Now.Year.ToString
+        curYear = Mid(curYear, 3)
+
+        Dim curMonth As String = Now.Month.ToString
+        If curMonth.Length < 2 Then
+            curMonth = "0" & curMonth
+        End If
+
+        Dim curDay As String = Now.Day.ToString
+        If curDay.Length < 2 Then
+            curDay = "0" & curDay
+        End If
+
+        Dim curObsPrefix As String = "E" & curYear & "-" & curMonth & "-"
+
+        Try
+            Using site As New spSite("http://localhost/exclusions")
+
+                Using web As spWeb = site.openweb()
+
+                    Dim list As SPList = web.Lists(listName)
+
+                    Dim query As New spQuery
+                    query.query = "<Where><BeginsWith><FieldRef Name='Exclusion_x0020__x0023_' />" & _
+                    "<Value Type='Text'>" & curObsPrefix & "</Value>" & _
+                    "</BeginsWith></Where><OrderBy><FieldRef Name='Exclusion_x0020__x0023_' Ascending='False' /></OrderBy>"
+
+
+                    Dim listItems As spListItemCollection = list.getItems(query)
+
+                    Dim newReportNo As Integer = 1
+
+                    If listItems IsNot Nothing AndAlso listItems.count > 0 Then
+                        Dim lastReportNo = listItems.item(0).item("Exclusion_x0020__x0023_")
+                        Dim licBits() As String = lastReportNo.split("-")
+                        Dim lastNo As Integer = CInt(licBits(2))
+                        newReportNo = lastNo + 1
+                    End If
+
+                    Response.Write(getFullReportNo(newReportNo, curObsPrefix))
+
+                End Using
+
+            End Using
+
+        Catch ex As Exception
+            Response.Write("Error:" & ex.Message)
+        End Try
+
+    End Sub
+
+    Private Function getFullReportNo(ByRef licNo As Integer, ByRef prefix As String) As String
+
+        Dim lic As String = licNo.ToString
+        While lic.Length < 3
+            lic = "0" & lic
+        End While
+
+        Return prefix & lic
+
+    End Function
+
+
+
+End Class
