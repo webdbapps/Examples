@@ -1,0 +1,217 @@
+BEGIN
+	-- SET NOCOUNT ON added to prevent extra result sets from
+	-- interfering with SELECT statements.
+	SET NOCOUNT ON;
+	
+    -- Insert statements for procedure here
+SELECT 
+p.[Encounter Number]
+	, MedicalRecordNumber
+	,[PERSON FIRST NAME]
+	,[PERSON LAST NAME]
+	,[AdmitDate - CCYYMMDD]
+	,[DischargeDate - CCYYMMDD]
+	,LengthOfStay
+	,[PERSON BIRTHDATE]
+	,Encounter.Age
+	,Sex
+	,DischargeDisposition
+	,[MS-DRG - AFTER 10 01 2007]
+	,InsurancePlanCode
+	,ActualTotalCharge
+	,EnctrAPR.APRDRG
+	,APRDRGWeight
+	,SOI
+	,ROM
+     , p.[1] AS DX1
+     , p.[2] AS DX2
+     , p.[3] AS DX3
+     , p.[4] AS DX4
+     , p.[5] AS DX5
+     , p.[6] AS DX6
+     , p.[7] AS DX7
+     , p.[8] AS DX8
+     , p.[9] AS DX9
+     , p.[10] AS DX10
+     , p.[11] AS DX11
+     , p.[12] AS DX12
+     , p.[13] AS DX13
+     , p.[14] AS DX14
+     , p.[15] AS DX15
+     , p.[16] AS DX16
+     , p.[17] AS DX17
+     , p.[18] AS DX18
+     , p.[19] AS DX19
+     , p.[20] AS DX20
+     , p.[21] AS DX21
+     , p.[22] AS DX22
+     , p.[23] AS DX23
+     , p.[24] AS DX24
+     , p.[25] AS DX25
+     , p.[26] AS DX26
+     , p.[27] AS DX27
+     , p.[28] AS DX28
+     , p.[29] AS DX29
+     , p.[30] AS DX30
+     , p.[31] AS DX31
+     , p.[32] AS DX32
+     , p.[33] AS DX33
+     , p.[34] AS DX34
+     , p.[35] AS DX35
+     , p.[36] AS DX36
+     , p.[37] AS DX37
+     , p.[38] AS DX38
+     , p.[39] AS DX39
+     , p.[40] AS DX40
+     , p.[41] AS DX41
+     , p.[42] AS DX42
+     , p.[43] AS DX43
+     , p.[44] AS DX44
+     , p.[45] AS DX45
+     , p.[46] AS DX46
+     , p.[47] AS DX47
+     , p.[48] AS DX48
+     , p.[49] AS DX49
+     , a.[1] AS POA1
+     , a.[2] AS POA2
+     , a.[3] AS POA3
+     , a.[4] AS POA4
+     , a.[5] AS POA5
+     , a.[6] AS POA6
+     , a.[7] AS POA7
+     , a.[8] AS POA8
+     , a.[9] AS POA9
+     , a.[10] AS POA10
+     , a.[11] AS POA11
+     , a.[12] AS POA12
+     , a.[13] AS POA13
+     , a.[14] AS POA14
+     , a.[15] AS POA15
+     , a.[16] AS POA16
+     , a.[17] AS POA17
+     , a.[18] AS POA18
+     , a.[19] AS POA19
+     , a.[20] AS POA20
+     , a.[21] AS POA21
+     , a.[22] AS POA22
+     , a.[23] AS POA23
+     , a.[24] AS POA24
+     , a.[25] AS POA25
+     , a.[26] AS POA26
+     , a.[27] AS POA27
+     , a.[28] AS POA28
+     , a.[29] AS POA29
+     , a.[30] AS POA30
+     , a.[31] AS POA31
+     , a.[32] AS POA32
+     , a.[33] AS POA33
+     , a.[34] AS POA34
+     , a.[35] AS POA35
+     , a.[36] AS POA36
+     , a.[37] AS POA37
+     , a.[38] AS POA38
+     , a.[39] AS POA39
+     , a.[40] AS POA40
+     , a.[41] AS POA41
+     , a.[42] AS POA42
+     , a.[43] AS POA43
+     , a.[44] AS POA44
+     , a.[45] AS POA45
+     , a.[46] AS POA46
+     , a.[47] AS POA47
+     , a.[48] AS POA48
+     , a.[49] AS POA49
+	,pr.[1] as Proc1
+	,pr.[2] as Proc2
+	,pr.[3] as Proc3
+	,pr.[4] as Proc4
+	,pr.[5] as Proc5
+	,pr.[6] as Proc6
+	,pr.[7] as Proc7
+	,pr.[8] as Proc8
+	,pr.[9] as Proc9
+	,pr.[10] as Proc10
+	,pr.[11] as Proc11
+	,pr.[12] as Proc12
+	,pr.[13] as Proc13
+	,pr.[14] as Proc14
+	,pr.[15] as Proc15
+	,pr.[16] as Proc16
+	,pr.[17] as Proc17
+	,pr.[18] as Proc18
+	,pr.[19] as Proc19
+	,pr.[20] as Proc20
+	,pr.[21] as Proc21
+	,pr.[22] as Proc22
+	,pr.[23] as Proc23
+	,pr.[24] as Proc24
+	,pr.[25] as Proc25
+	,pr.[26] as Proc26
+	,pr.[27] as Proc27
+	,pr.[28] as Proc28
+	,pr.[29] as Proc29
+	,pr.[30] as Proc30
+	,pr.[31] as Proc31
+	,pr.[32] as Proc32
+	,pr.[33] as Proc33
+	,pr.[34] as Proc34
+	,pr.[35] as Proc35
+	,pr.[36] as Proc36
+	,pr.[37] as Proc37
+	,pr.[38] as Proc38
+	,pr.[39] as Proc39
+	,pr.[40] as Proc40
+	,pr.[41] as Proc41
+	,pr.[42] as Proc42
+	,pr.[43] as Proc43
+	,pr.[44] as Proc44
+	,pr.[45] as Proc45
+	,pr.[46] as Proc46
+	,pr.[47] as Proc47
+	,pr.[48] as Proc48
+	,pr.[49] as Proc49
+
+  FROM ( SELECT * -- Yeah, I cheated here - it's ugly.  I wouldn't do that in your production code.
+           FROM ( SELECT [ENCOUNTER NUMBER]
+                       , [SECONDARY DIAGNOSIS]
+                       , ROW_NUMBER() OVER ( PARTITION BY [ENCOUNTER NUMBER] ORDER BY [Encounter Number] , [SECONDARY DIAG SEQUENCE] ) AS RowNumber -- assign them an ID in the order here..
+                    FROM EncounterDiag) o
+          PIVOT ( MAX( [SECONDARY DIAGNOSIS] ) FOR RowNumber IN (    [1] ,  [2] ,  [3] ,  [4] ,  [5] ,  [6] ,  [7] ,  [8] ,  [9] , [10]
+                                                 , [11] , [12] , [13] , [14] , [15] , [16] , [17] , [18] , [19] , [20]
+                                                 , [21] , [22] , [23] , [24] , [25] , [26] , [27] , [28] , [29] , [30]
+                                                 , [31] , [32] , [33] , [34] , [35] , [36] , [37] , [38] , [39] , [40]
+                                                 , [41] , [42] , [43] , [44] , [45] , [46] , [47] , [48] , [49] ) ) r ) p
+  Left Outer JOIN ( SELECT * -- Yeah, I cheated here - it's ugly.  I wouldn't do that in your production code.
+           FROM ( SELECT [Encounter Number]
+                       , [PRESENT ON ADMISSION FLAG]
+                       , ROW_NUMBER() OVER ( PARTITION BY [Encounter Number] ORDER BY [Encounter Number] , [SECONDARY DIAGNOSIS] ) AS RowNumber -- assign them an ID in the order here..
+                    FROM EncounterDiag) o
+          PIVOT ( MAX( [PRESENT ON ADMISSION FLAG] ) FOR RowNumber IN (    [1] ,  [2] ,  [3] ,  [4] ,  [5] ,  [6] ,  [7] ,  [8] ,  [9] , [10]
+                                                , [11] , [12] , [13] , [14] , [15] , [16] , [17] , [18] , [19] , [20]
+                                                , [21] , [22] , [23] , [24] , [25] , [26] , [27] , [28] , [29] , [30]
+                                                , [31] , [32] , [33] , [34] , [35] , [36] , [37] , [38] , [39] , [40]
+                                                , [41] , [42] , [43] , [44] , [45] , [46] , [47] , [48] , [49] ) ) t ) a
+
+	ON p.[Encounter Number] = a.[Encounter Number]
+	Left Outer JOIN ( SELECT *
+			FROM (SELECT [Encounter Number]
+						,[Procedure Code (Enctr)]
+						,Row_Number() OVER ( Partition By [Encounter Number] Order By [Encounter Number], [Procedure Code (Enctr)] ) AS RowNumber
+			FROM EncounterProc) o
+	PIVOT ( MAX([Procedure Code (Enctr)] ) for RowNumber IN ( [1], [2], [3], [4], [5], [6], [7], [8], [9], [10]
+															,[11], [12], [13], [14], [15], [16], [17], [18], [19], [20]
+															,[21], [22], [23], [24], [25], [26], [27], [28], [29], [30]
+															,[31], [32], [33], [34], [35], [36], [37], [38], [39], [40]
+															,[41], [42], [43], [44], [45], [46], [47], [48], [49]) ) t ) pr
+
+    on p.[Encounter Number] = pr.[Encounter Number]
+	Left Outer Join Encounter on 
+	p.[Encounter Number] = Encounter.EncounterNumber
+	Left Outer Join Patient_MEDRCD on 
+	Encounter.PatientSK = Patient_MEDRCD.PatientSK
+	Left Outer Join EnctrAPR on
+	substring(p.[Encounter Number],4,9) = EnctrAPR.EncounterNumber
+where
+	HSP#='1' and InOutCode='I' and InsurancePlanCode='M01' and AdmitSubService <>'SIG'
+	and [DischargeDate - CCYYMMDD] between @StartDate and @EndDate
+END
