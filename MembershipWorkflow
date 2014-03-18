@@ -1,0 +1,565 @@
+    public sealed class DiplomateStatus
+    {
+        private string _paymenturlExam = string.Empty;
+        private string _paymenturlRecert = string.Empty;
+        private bool _readyToSubmit;
+        private int _portalId;
+        private EnumDiplomateStatus _currentStatus;
+        private UserInfo _user;
+
+        public string PaymentUrlExam
+        {
+            get { return _paymenturlExam; }
+            set { _paymenturlExam = value; } 
+        }
+
+        public string PaymentUrlRecert
+        {
+            get { return _paymenturlRecert; }
+            set { _paymenturlRecert = value; }
+        }
+
+        public bool ReadyToSubmit
+        {
+            get { return _readyToSubmit; }
+        }
+
+        public int PortalId
+        {
+            get { return _portalId; }
+        }
+
+        public UserInfo User
+        {
+            get { return _user; }
+        }
+
+        public EnumDiplomateStatus CurrentStatus 
+        { 
+            get { return _currentStatus; } 
+        }
+
+        public string CurrentStatusString
+        {
+            get 
+            {
+                if (_currentStatus == EnumDiplomateStatus.Other)
+                {
+                    var lr = DNN_Utilities.getLastRole(_user);
+                    if (lr != null)
+                    {
+                        return lr.RoleName;
+                    }
+                    else
+                    {
+                        return "Unverified";
+                    }
+                }
+                else
+                {
+                    return _currentStatus.ToString().Replace('_', ' ');
+                }
+            }
+        }
+
+        public string NextStatusString
+        {
+            get 
+            {
+                if (CurrentStatus == NextStatus && CurrentStatus == EnumDiplomateStatus.Diplomate)
+                {
+                    return "Diplomate Re-certification";
+                }
+                else
+                {
+                    return NextStatus.ToString().Replace('_', ' ');
+                }
+            } 
+        }
+
+        public EnumDiplomateStatus NextStatus 
+        {
+            get
+            {
+                if (_currentStatus == EnumDiplomateStatus.Administrator)
+                {
+                    return EnumDiplomateStatus.Administrator;
+                }
+                else if (_currentStatus == EnumDiplomateStatus.Other)
+                {
+                    return EnumDiplomateStatus.Other;
+                }
+                else
+                {
+                    int nextStat = (int)CurrentStatus + 1;
+                    nextStat = nextStat > 4 ? 4 : nextStat;
+                    return (EnumDiplomateStatus)nextStat;
+                }
+            }        
+        }
+
+        public DiplomateStatus(int portalid, int userid) 
+        {
+            try
+            {
+                UserController uCtrl = new UserController();
+                _portalId = portalid;
+                _user = uCtrl.GetUser(portalid, userid);
+                setUserStatus();
+            }
+            catch (Exception ex)
+            {
+                Exceptions.LogException(ex);
+            }
+        }
+
+        public Data.AdminTask GenerateNextStepTask()
+        {
+            var newTask = new Data.AdminTask();
+            newTask.PortalId = _portalId;
+            newTask.UserId = _user.UserID;
+            newTask.TaskType = getNextStepTaskType();
+            newTask.Completed = "N";
+            newTask.CreatedDate = DateTime.Now;
+
+            return newTask;
+        }
+
+        public Data.AdminTask GetNextStepTask()
+        {
+            Data.AdminTask foundTask = null;
+            var atRepo = new AdminTaskRepository();
+            var tasks = atRepo.GetByUser(_user.UserID, getNextStepTaskType(), false);
+            if (tasks.Count > 0)
+            {
+                foundTask = tasks.First();
+                foundTask = atRepo.GetByID(foundTask.TaskId, true, null);
+            }
+            return foundTask;
+        }
+
+        public List<String> ValidateNextStatus()
+        {
+            bool recert = false;
+            _readyToSubmit = false;
+            var validationList = new List<String>();
+            switch (NextStatus)
+            {
+                case EnumDiplomateStatus.Student:
+                    break;
+                case EnumDiplomateStatus.Potential_Candidate:
+                    validationList = doPotentialCandidateValidate();
+                    break;
+                case EnumDiplomateStatus.Registered_Candidate:
+                    validationList = doRegisteredCandidateValidate();
+                    break;
+                case EnumDiplomateStatus.Certificate_in_EDX : 
+                case EnumDiplomateStatus.Certified_in_Vestibular_Rehabilitation : 
+                case EnumDiplomateStatus.Diplomate : 
+                    if (this.CurrentStatus == EnumDiplomateStatus.Registered_Candidate)
+                    {
+                        validationList = doDiplomateValidate();
+                    }
+                    else
+                    {
+                        DateTime lastPaymentMade = DateTime.MinValue;
+                        bool fRecertFeePaid = false;
+                        var context = Data.DiplomateEntities.Instance();
+                        var examPayments = context.FindEight_DiplomateMgr_UserPayments(_user.UserID, "Recertification Fee");
+                        foreach (var payment in examPayments.ToList())
+                        {
+                            lastPaymentMade = payment.CreateDate;
+                            fRecertFeePaid = (!String.IsNullOrEmpty(payment.TransactionId));
+                            fRecertFeePaid = (fRecertFeePaid && (payment.CreateDate > DateTime.Now.AddYears(-1)));
+                            if (fRecertFeePaid) { break; }
+                        }
+
+
+                        DateTime expiry = DNN_Utilities.getRoleExpiration(_user, StringEnum.GetStringValue(_currentStatus));
+                        validationList = doDiplomateReValidate(expiry);
+                        if (DateTime.Now > expiry)
+                        {
+                            validationList.Insert(0, String.Format("Your certification expired on {0}", expiry.ToShortDateString()));
+                        }
+                        else
+                        {
+                            validationList.Insert(0, String.Format("Your certification is current. Expiration is on {0}", expiry.ToShortDateString()));
+                        }
+                        if (lastPaymentMade > DateTime.MinValue)
+                        {
+                            validationList.Add(String.Format("Your last recertification fee payment was on {0:d}. Click <a href=\"{1}\">here</a> to make your next payment.", lastPaymentMade, PaymentUrlRecert));
+                        }
+                        else
+                        {
+                            validationList.Add(String.Format("If you would like to make a recertification payment, click <a href=\"{0}\">here</a> to make the payment.", PaymentUrlRecert));
+                        }
+                        recert = true;
+                    }
+                    break;
+                case EnumDiplomateStatus.Administrator:
+                    validationList.Add("None, you are an administrator!");
+                    break;
+                case EnumDiplomateStatus.Other:
+                    string role = CurrentStatusString;
+                    DateTime roleExp = DNN_Utilities.getRoleExpiration(_user, role);
+                    if (roleExp > DateTime.MinValue && roleExp < DateTime.MaxValue)
+                    {
+                        validationList.Add(String.Format("None, you are in role: {0} until {1}.", role, roleExp.ToShortDateString()));
+                    }
+                    else
+                    {
+                        validationList.Add(String.Format("None, you are in role: {0}.", role));
+                    }
+                    break;
+            }
+
+            if ((recert && validationList.Count == 1) || (!recert && validationList.Count == 0))
+            {
+                var atRepo = new AdminTaskRepository();
+                var tasks = atRepo.GetByUser(_user.UserID, getNextStepTaskType(), false);
+                _readyToSubmit = (tasks.Count == 0);
+                if (_readyToSubmit)
+                {
+                    string msg = String.Format("You have completed the requirements for {0}. Submit for administrator approval.",
+                        NextStatusString);
+                    validationList.Add(msg);
+                }
+            }
+            return validationList;
+        }
+
+        #region "Private Methods"
+
+        private int getNextStepTaskType()
+        {
+            int taskType = 0;
+            switch (NextStatus)
+            {
+                case EnumDiplomateStatus.Student:
+                    taskType = 1;
+                    break;
+                case EnumDiplomateStatus.Potential_Candidate:
+                    taskType = 10;
+                    break;
+                case EnumDiplomateStatus.Registered_Candidate:
+                    taskType = 20;
+                    break;
+                case EnumDiplomateStatus.Certificate_in_EDX:
+                case EnumDiplomateStatus.Certified_in_Vestibular_Rehabilitation:
+                case EnumDiplomateStatus.Diplomate:
+                    taskType = 30;
+                    break;
+            }
+            return taskType;
+        }
+
+        private void setUserStatus()
+        {
+            _currentStatus = EnumDiplomateStatus.Other;
+            if (_user != null)
+            {
+                if (_user.IsSuperUser)
+                {
+                    _currentStatus = EnumDiplomateStatus.Administrator;
+                }
+                else if (_user.IsInRole("Diplomate"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Diplomate;
+                }
+                else if (_user.IsInRole("Registered Candidate"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Registered_Candidate;
+                }
+                else if (_user.IsInRole("Potential Candidate"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Potential_Candidate;
+                }
+                else if (_user.IsInRole("Certificate in EDX"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Certificate_in_EDX;
+                }
+                else if (_user.IsInRole("Certified in Vestibular Rehabilitation"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Certified_in_Vestibular_Rehabilitation;
+                }
+                else if (_user.IsInRole("Student"))
+                {
+                    _currentStatus = EnumDiplomateStatus.Student;
+                }
+            }
+        }
+
+        private List<String> doPotentialCandidateValidate()
+        {
+            var valList = new List<String>();
+
+            /*
+             * Validate Rule: 
+             *      Student has completed the following profile actions:
+             *      - Completed all required personal information
+             *      - Added an Undergraduate education item
+             *      - Added a Chiropractic degree item
+             *      - Submits for review by Administrator
+            */
+
+            // validate personal profile
+            bool rc = ProfileController.ValidateProfile(_portalId, _user.Profile);
+            if (!rc)
+            {
+                valList.Add("There are required fields missing in your personal profile.");
+            }
+
+            // validate education degrees
+            bool fUndergrad = false;
+            bool fChirograd = false;
+            var eduRepo = new DegreeRepository();
+            foreach (Data.Degree degree in eduRepo.GetList(_portalId, _user.UserID))
+            {
+                fUndergrad = (fUndergrad || degree.DegreeType == "UNDERGRAD");
+                fChirograd = (fChirograd || degree.DegreeType != "CHIROPRACTIC");
+            }
+            if (!fUndergrad)
+            {
+                valList.Add("You need at least one undergraduate degree added to your profile.");
+            }
+            if (!fChirograd)
+            {
+                valList.Add("You need at least one Chiropractic degree (or proof of enrollment) added to your profile.");
+            }
+
+            return valList;
+        }
+
+        private List<String> doRegisteredCandidateValidate()
+        {
+            var valList = new List<String>();
+
+            /*
+             * Validate Rule: 
+             *      Potential Candidate has completed the following profile actions:
+             *      - All Potential Candidate requirements are still met
+             *      - Added a Chiropractic license item
+             *      - Added a CAGEN-approved course
+             *      - Paid exam fee
+            */
+            valList = doPotentialCandidateValidate();
+            var licRepo = new LicenseRepository();
+
+            bool fChiroLicense = false;
+            foreach (Data.License license in licRepo.GetList(_portalId, _user.UserID))
+            {
+                if (license.LicenseType == "CHIROPRACTIC") {
+                    fChiroLicense = true;
+                    break;
+                }
+            }
+
+            bool fExamFeePaid = false;
+            var context = Data.DiplomateEntities.Instance();
+            var examPayments = context.FindEight_DiplomateMgr_UserPayments(_user.UserID, "Exam Fee");
+            foreach (var payment in examPayments.ToList())
+            {
+                fExamFeePaid = (!String.IsNullOrEmpty(payment.TransactionId));
+                fExamFeePaid = (fExamFeePaid && (payment.CreateDate > DateTime.Now.AddYears(-1)));
+                if (fExamFeePaid) { break; }
+            }
+
+            bool fCagenCourse = false;
+            var eduRepo = new CourseRepository();
+            foreach (Data.Course c in eduRepo.GetList(_portalId, _user.UserID))
+            {
+                fCagenCourse = (c.CourseType == "CAGEN");
+                if (fCagenCourse) { break; }
+            }
+
+            if (!fChiroLicense)
+            {
+                valList.Add("You need at least one Chiropractic license added to your profile.");
+            }
+
+            if (!fCagenCourse)
+            {
+                valList.Add("You need to upload your transcript of at least 300 hours from CAGEN accredited agencies (Carrick Institute and National University). Place this in the Continuing Education section of your profile.");
+            }
+
+            if (!fExamFeePaid)
+            {
+                valList.Add(String.Format("You need to make an exam fee payment. Click <a href=\"{0}\">here</a> to make the payment.", PaymentUrlExam));
+            }
+
+            if (!fExamFeePaid || !fChiroLicense || !fCagenCourse)
+            {
+                valList.Add("You can request an exception to one or more of the above requirements from the Administrator by clicking " +
+                    "<a href=\"javascript:void(0);\" class=\"open-message-link\">here</a>");
+            }
+
+            return valList;
+        }
+
+        private List<String> doDiplomateValidate()
+        {
+            var valList = new List<String>();
+
+            /*
+             * Validate Rule: 
+             *      Registered Candidate has completed the following profile actions:
+             *      - Added a primary location
+            */
+            valList = doPotentialCandidateValidate();
+
+            bool fHasPrimLocation = false;
+            var locRepo = new LocationRepository();
+            foreach (Data.Location loc in locRepo.GetList(_portalId, _user.UserID))
+            {
+                fHasPrimLocation = loc.PrimaryLocation;
+                if (fHasPrimLocation) { break; }
+            }
+
+            if (!fHasPrimLocation)
+            {
+                valList.Add("You need at least one Location marked as primary added to your profile.");
+            }
+
+            valList.Add("The administrator is currently evaluating your diplomate promotion.");
+
+            return valList;
+        }
+
+        private List<String> doDiplomateReValidate(DateTime expireDate)
+        {
+            var valList = new List<String>();
+
+            /*
+             * Validate Rule: 
+             *      Diplomate has completed the following profile actions:
+             *      - has at least 30 hours in courses
+             *      - indicated participation in a committee
+             *      - added at least 24 articles
+             *      - has a current chiropractic license
+            */
+            valList = doDiplomateValidate();
+            // Remove the diplomate evaluation validation
+            valList.RemoveAt(valList.Count - 1);
+
+            if (expireDate == DateTime.MinValue)
+            {
+                expireDate = DateTime.Today.AddYears(-100);
+            }
+
+            int iCEHours = 0;
+            var courseRepo = new CourseRepository();
+            foreach (Data.Course course in courseRepo.GetList(_portalId, _user.UserID))
+            {
+                DateTime completed = new DateTime(course.CompletedYear, course.CompletedMonth, 1);
+                if (completed > expireDate.AddYears(-1))
+                {
+                    iCEHours += course.Hours; 
+                }
+            }
+
+            bool fParticipation = false;
+            string committeeList = _user.Profile.GetPropertyValue("CommitteeVolunteer");
+            if (!String.IsNullOrEmpty(committeeList))
+            {
+                foreach (string c in committeeList.Split('|'))
+                {
+                    if (!String.IsNullOrEmpty(c) && "agnoff|test development|telephone tree|ad hoc committees as needed|associate examiners".Contains(c.ToLower()))
+                    {
+                        fParticipation = true;
+                        break;
+                    }
+                }
+            }
+
+            int iBibliography = 0;
+            var bibRepo = new ArticleRepository();
+            iBibliography = bibRepo.GetList(_portalId, _user.UserID).Count;
+
+            bool fChiroLicense = false;
+            var licRepo = new LicenseRepository();
+            foreach (Data.License license in licRepo.GetList(_portalId, _user.UserID))
+            {
+                if (license.LicenseType == "CHIROPRACTIC")
+                {
+                    DateTime licDate = new DateTime(license.LicenseYear, license.LicenseMonth, 1).AddMonths(1).AddDays(-1);
+                    fChiroLicense = (licDate > expireDate.AddYears(-1));
+                    if (fChiroLicense) { break; }
+                }
+            }
+
+            if (iCEHours < 30)
+            {
+                valList.Add(String.Format("You have {0} hours of current continuing education courses added to your profile and you need at least 30 hours.", iCEHours));
+            }
+
+            if (!fParticipation)
+            {
+                valList.Add("You must indicate participation in at least one of the following committees or activities: Agnoff, Test Development, Telephone Tree, " +
+                    "Ad hoc Committees as needed, or Associate Examiners. " +
+                    "Click <a href=\"javascript:void(0);\" class=\"open-committee-link\">here</a> to indicate your interest in participation");
+            }
+
+            if (iBibliography < 24)
+            {
+                valList.Add(String.Format("You have {0} articles in your bibliography and you need at least 24.", iBibliography));
+            }
+
+            return valList;
+        }
+
+        #endregion
+    }
+
+    public enum EnumDiplomateStatus
+    {
+        [StringValue("Other")]
+        Other = 0,
+        [StringValue("Student")]
+        Student = 1,
+        [StringValue("Potential Candidate")]
+        Potential_Candidate = 2,
+        [StringValue("Registered Candidate")]
+        Registered_Candidate = 3,
+        [StringValue("Diplomate")]
+        Diplomate = 4,
+        [StringValue("Certificate in EDX")]
+        Certificate_in_EDX = 5,
+        [StringValue("Certified in Vestibular Rehabilitation")]
+        Certified_in_Vestibular_Rehabilitation = 6,
+        [StringValue("Administrator")]
+        Administrator = 9
+    }
+
+    public class StringValue : System.Attribute
+    {
+        private string _value;
+
+        public StringValue(string value)
+        {
+            _value = value;
+        }
+
+        public string Value
+        {
+            get { return _value; }
+        }
+
+    }
+
+    public static class StringEnum
+    {
+        public static string GetStringValue(Enum value)
+        {
+            string output = null;
+            Type type = value.GetType();
+            FieldInfo fi = type.GetField(value.ToString());
+            StringValue[] attrs =
+               fi.GetCustomAttributes(typeof(StringValue),
+                                       false) as StringValue[];
+            if (attrs.Length > 0)
+            {
+                output = attrs[0].Value;
+            }
+            return output;
+        }
+    }
