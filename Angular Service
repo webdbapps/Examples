@@ -1,0 +1,108 @@
+import { Injectable } from '@angular/core';
+
+import { ActivityLogEntry } from '@/app/shared/models/activity-log-entry';
+import { ActivityLogEntryPipe } from '@/app/shared/activity-log-entry.pipe';
+import { LogService } from '@/app/services/log.service';
+import { FileSystemService } from '@/app/services/file-system-service.service';
+import { NotificationService } from '@/app/services/notification.service';
+import { SessionService } from '@/app/services/session.service';
+
+import * as _ from 'lodash';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ActivityLogService {
+
+  private _activityLog: ActivityLogEntry[] = [];
+
+  constructor(
+    private _activityEntryPipe: ActivityLogEntryPipe,
+    private _fsService: FileSystemService,
+    private _logService: LogService,
+    private _notificationService: NotificationService,
+    private _sessionService: SessionService
+    ) {
+      this._sessionService.setupActivityLogService(this);
+    }
+
+  public clearActivity(): void {
+    this._activityLog = [];
+  }
+
+  public async addEntry(text: string): Promise<void> {
+    if (this._sessionService.hasRecordingSession) {
+      const entry = new ActivityLogEntry({
+        entryDate: new Date(),
+        message: text,
+        cue: this._sessionService.getLatestAudioCue()
+      });
+      this._activityLog.push(entry);
+      await this.saveTransactionEntry('add', entry);
+      await this.saveActivityEntry(entry);
+    } else {
+      this._notificationService.showNotInSessionError();
+    }
+  }
+
+  public async editEntry(entry: ActivityLogEntry, newMessage: string) {
+    // Assuming that entry is the same reference that is in the
+    // array above.  This will not work with a clone or copy.
+    await this.saveTransactionEntry('edit-from', entry);
+    entry.message = newMessage;
+    await this.saveTransactionEntry('edit-to', entry);
+    await this.rewriteActivityLog();
+  }
+
+  public async removeEntry(entry: ActivityLogEntry): Promise<void> {
+    // Assuming that entry is the same reference that is in the
+    // array above.  This will not work with a clone or copy.
+    entry.dateDeleted = new Date();
+    await this.saveTransactionEntry('delete', entry);
+    await this.rewriteActivityLog();
+  }
+
+  public get activityLog(): ActivityLogEntry[] {
+    return this._activityLog;
+  }
+
+  public set activityLog(value: ActivityLogEntry[]) {
+    this._activityLog = value;
+  }
+
+  public async rewriteActivityLog(): Promise<void> {
+    const logFile = this._sessionService.sessionFilePaths.activityLogFilePath;
+    const metadataFile = this._sessionService.sessionFilePaths.activityLogFileWithMetadataPath;
+    const logFileBackup = this._fsService.backupFilepath(logFile);
+    const metadataFileBackup = this._fsService.backupFilepath(metadataFile);
+
+    this._logService.trace('Saving backup activity log files due to data edit');
+    await this._fsService.rename(logFile, logFileBackup);
+    await this._fsService.rename(metadataFile, metadataFileBackup);
+
+    try {
+      this._logService.trace('Rewriting activity log files');
+      for (const e of this._activityLog) {
+        this.saveActivityEntry(e);
+      }
+      await this._fsService.deleteFile(logFileBackup);
+      await this._fsService.deleteFile(metadataFileBackup);
+    } catch (error) {
+      this._logService.error('Failed to rewrite activity log, restoring backups', error);
+      await this._fsService.rename(logFileBackup, logFile);
+      await this._fsService.rename(metadataFileBackup, metadataFile);
+    }
+  }
+
+  private async saveActivityEntry(entry: ActivityLogEntry): Promise<void> {
+    await this._fsService.writeLine(this._sessionService.sessionFilePaths.activityLogFileWithMetadataPath, entry);
+    await this._fsService.writeLine(this._sessionService.sessionFilePaths.activityLogFilePath, this._activityEntryPipe.transform(entry));
+  }
+
+  private async saveTransactionEntry(operation: string, entry: ActivityLogEntry): Promise<void> {
+    const dt = new Date();
+    const txn =  `${operation} - ${dt.toUTCString()} => ${JSON.stringify(entry)}`;
+
+    await this._fsService.writeLine(this._sessionService.sessionFilePaths.activityLogTransactionPath, txn);
+  }
+}
